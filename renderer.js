@@ -54,6 +54,27 @@ $('#btn-overlay').addEventListener('click', () => window.overlay.newOverlay());
 $('#btn-op-up').addEventListener('click', () => window.overlay.bumpOpacity(0.1));
 $('#btn-op-down').addEventListener('click', () => window.overlay.bumpOpacity(-0.1));
 
+// ─── Window controls + theme ─────────────────────────────────────────────────
+const btnTheme = $('#btn-theme'), btnMin = $('#btn-min'), btnMax = $('#btn-max');
+let theme = 'dark';
+
+function applyTheme(t) {
+  theme = t === 'light' ? 'light' : 'dark';
+  document.body.classList.toggle('light', theme === 'light');
+  btnTheme.textContent = theme === 'light' ? '☀' : '☾';
+}
+btnTheme.addEventListener('click', () => {
+  applyTheme(theme === 'light' ? 'dark' : 'light');
+  window.overlay.setTheme(theme);
+});
+btnMin.addEventListener('click', () => {
+  window.overlay.winMinimize().then((collapsed) =>
+    document.body.classList.toggle('collapsed', !!collapsed));
+});
+btnMax.addEventListener('click', () => {
+  window.overlay.winMaximize().then((maxed) => btnMax.classList.toggle('active', !!maxed));
+});
+
 // ─── Rename: double-click the title ──────────────────────────────────────────
 function startRename() {
   if (titleEl.textContent === 'Markdown Overlay') return; // no file yet
@@ -125,6 +146,7 @@ updateLock();
 window.overlay.on('load-file', (d) => {
   titleEl.textContent = d.name || 'Markdown Overlay';
   isText = !!d.isText;
+  if (d.theme) applyTheme(d.theme);
   document.body.classList.remove('editing');
   btnEdit.classList.remove('active');
   render(d.content);
@@ -140,10 +162,13 @@ window.overlay.on('status', (msg) => toast(msg));
 (async () => {
   try {
     const s = await window.overlay.getState();
-    if (s && s.file) {
-      titleEl.textContent = s.name || 'Markdown Overlay';
-      isText = !!s.isText;
-      render(s.content);
+    if (s) {
+      if (s.theme) applyTheme(s.theme);
+      if (s.file) {
+        titleEl.textContent = s.name || 'Markdown Overlay';
+        isText = !!s.isText;
+        render(s.content);
+      }
     }
   } catch (e) { console.error(e); }
 })();

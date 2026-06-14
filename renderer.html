@@ -123,12 +123,28 @@
     font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px;
     line-height: 1.55; background: none; border: 0; padding: 0;
   }
+  /* Window controls (left of title) */
+  button.icon.win { width: 22px; height: 20px; font-size: 13px; border-radius: 6px; }
+  /* Collapsed (minimized → roll up to the bar) */
+  body.collapsed .content, body.collapsed #toast { display: none; }
+  /* Light theme */
+  body.light {
+    --bg: rgba(248, 249, 251, 0.66);
+    --bg-solid: rgba(255, 255, 255, 0.96);
+    --stroke: rgba(0, 0, 0, 0.12);
+    --text: #1c1e24;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --code-bg: rgba(0, 0, 0, 0.05);
+  }
 </style>
 </head>
 <body>
   <div class="shell">
     <div class="bar">
-      <span class="dot"></span>
+      <button class="icon win" id="btn-min" title="Minimize (roll up)">–</button>
+      <button class="icon win" id="btn-max" title="Maximize / restore">▢</button>
+      <button class="icon win" id="btn-theme" title="Light / dark theme">☾</button>
       <span class="title" id="title" title="Double-click to rename">Markdown Overlay</span>
       <input class="title-edit" id="title-edit" spellcheck="false" />
       <span class="saved" id="saved"></span>

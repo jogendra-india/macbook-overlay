@@ -162,8 +162,10 @@ function refresh(e) {
   const overBar = e && e.target && e.target.closest && e.target.closest('.bar');
   applyInteractive(contentInteractive() || !!overBar);
 }
+const LOCK_CLOSED = '<svg viewBox="0 0 16 16"><rect x="3.8" y="7.3" width="8.4" height="5.4" rx="1.4"/><path d="M5.7 7.3V5.7a2.3 2.3 0 0 1 4.6 0v1.6"/></svg>';
+const LOCK_OPEN = '<svg viewBox="0 0 16 16"><rect x="3.8" y="7.3" width="8.4" height="5.4" rx="1.4"/><path d="M5.7 7.3V5.7a2.3 2.3 0 0 1 4.4-.7"/></svg>';
 function updateLock() {
-  btnLock.textContent = locked ? '🔒' : '🔓';
+  btnLock.innerHTML = locked ? LOCK_CLOSED : LOCK_OPEN;
   btnLock.classList.toggle('active', !locked);
   btnLock.title = locked
     ? 'Content is click-through — click to interact with the note (title bar always moves the window)'

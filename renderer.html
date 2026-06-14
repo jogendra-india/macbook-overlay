@@ -49,17 +49,23 @@
   .drag-spacer { flex: 1; align-self: stretch; min-width: 20px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
          box-shadow: 0 0 8px var(--accent); flex: none; }
-  .actions { -webkit-app-region: no-drag; display: flex; gap: 6px; }
+  .actions { -webkit-app-region: no-drag; display: flex; gap: 3px; }
   button.icon {
     -webkit-app-region: no-drag;
-    appearance: none; border: 1px solid var(--stroke);
-    background: rgba(255,255,255,0.04); color: var(--text);
-    width: 28px; height: 24px; border-radius: 7px; cursor: pointer;
-    font-size: 12px; line-height: 1; display: grid; place-items: center;
-    transition: background .12s ease, border-color .12s ease;
+    appearance: none; border: 0;
+    background: transparent; color: var(--muted);
+    width: 20px; height: 20px; border-radius: 5px; cursor: pointer;
+    line-height: 0; display: grid; place-items: center; padding: 0;
+    transition: background .12s ease, color .12s ease;
   }
-  button.icon:hover { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.22); }
-  button.icon.active { background: rgba(110,168,254,0.22); border-color: var(--accent); color: #fff; }
+  button.icon:hover { background: rgba(127,127,127,0.16); color: var(--text); }
+  button.icon.active { color: var(--accent); }
+  button.icon svg {
+    width: 13px; height: 13px; display: block;
+    fill: none; stroke: currentColor; stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  button.icon svg.dots { fill: currentColor; stroke: none; }
 
   .content { flex: 1; overflow: hidden; position: relative; }
   /* Scrollable views */
@@ -130,9 +136,9 @@
     line-height: 1.55; background: none; border: 0; padding: 0;
   }
   /* Window controls (left of title) */
-  button.icon.win { width: 22px; height: 20px; font-size: 13px; border-radius: 6px; }
-  button.icon.win.close { font-size: 16px; }
-  button.icon.win.close:hover { background: rgba(237,76,68,0.9); border-color: rgba(237,76,68,0.95); color: #fff; }
+  button.icon.win { width: 18px; height: 18px; border-radius: 5px; }
+  button.icon.win svg { width: 12px; height: 12px; }
+  button.icon.win.close:hover { background: rgba(237,76,68,0.92); color: #fff; }
   /* Collapsed (minimized → roll up to the bar) */
   body.collapsed .content, body.collapsed #toast, body.collapsed .menu { display: none; }
 
@@ -181,17 +187,17 @@
 <body>
   <div class="shell">
     <div class="bar">
-      <button class="icon win close" id="btn-close" title="Close overlay (⌘W)">×</button>
-      <button class="icon win" id="btn-min" title="Minimize (roll up)">–</button>
-      <button class="icon win" id="btn-max" title="Maximize / restore">▢</button>
+      <button class="icon win close" id="btn-close" title="Close overlay (⌘W)"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+      <button class="icon win" id="btn-min" title="Minimize (roll up)"><svg viewBox="0 0 16 16"><path d="M4 8.5h8"/></svg></button>
+      <button class="icon win" id="btn-max" title="Maximize / restore"><svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.6"/></svg></button>
       <span class="title" id="title" title="Double-click to rename">Markdown Overlay</span>
       <input class="title-edit" id="title-edit" spellcheck="false" />
       <span class="saved" id="saved"></span>
       <span class="drag-spacer"></span>
       <div class="actions">
-        <button class="icon" id="btn-lock" title="Click-through lock">🔒</button>
-        <button class="icon" id="btn-edit" title="Toggle edit (autosaves)">✎</button>
-        <button class="icon" id="btn-more" title="More options">⋯</button>
+        <button class="icon" id="btn-lock" title="Click-through lock"></button>
+        <button class="icon" id="btn-edit" title="Toggle edit (autosaves)"><svg viewBox="0 0 16 16"><path d="M3 13l2.6-.7 7-7-1.9-1.9-7 7L3 13z"/><path d="M10.6 4.4l1.9 1.9"/></svg></button>
+        <button class="icon" id="btn-more" title="More options"><svg viewBox="0 0 16 16" class="dots"><circle cx="3.6" cy="8" r="1.15"/><circle cx="8" cy="8" r="1.15"/><circle cx="12.4" cy="8" r="1.15"/></svg></button>
       </div>
     </div>
     <div class="menu" id="menu" role="menu">

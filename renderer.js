@@ -5,7 +5,13 @@ const view = $('#view'), editor = $('#editor'), titleEl = $('#title'),
       titleEdit = $('#title-edit'), savedEl = $('#saved'), btnEdit = $('#btn-edit');
 let currentText = '';
 let isText = false;
+let hasFile = false;
 let saveTimer = null;
+
+function setTitle(name) {
+  titleEl.textContent = name || 'Markdown Overlay';
+  hasFile = !!name;
+}
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) =>
@@ -26,7 +32,12 @@ function toast(msg) {
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1400);
 }
 
-function setEditing(on) {
+async function setEditing(on) {
+  if (on && !hasFile) {
+    // No file bound yet — create one so edits actually persist.
+    const r = await window.overlay.ensureFile();
+    if (r && r.name) setTitle(r.name);
+  }
   document.body.classList.toggle('editing', on);
   btnEdit.classList.toggle('active', on);
   if (on) { editor.value = currentText; editor.focus(); }
@@ -40,7 +51,8 @@ editor.addEventListener('input', () => {
   saveTimer = setTimeout(async () => {
     const r = await window.overlay.saveContent(editor.value);
     currentText = editor.value;
-    savedEl.textContent = r.ok ? 'saved ✓' : 'save failed';
+    if (r && r.name) setTitle(r.name);   // reflect the auto-created file name
+    savedEl.textContent = r && r.ok ? 'saved ✓' : 'save failed';
     setTimeout(() => (savedEl.textContent = ''), 1200);
   }, 500);
 });
@@ -95,7 +107,7 @@ function showOpacity(v) { if (typeof v === 'number' && opVal) opVal.textContent 
 
 // ─── Rename: double-click the title ──────────────────────────────────────────
 function startRename() {
-  if (titleEl.textContent === 'Markdown Overlay') return; // no file yet
+  if (!hasFile) { toast('Start editing first to create the file'); return; }
   titleEdit.value = titleEl.textContent;
   document.body.classList.add('renaming');
   titleEdit.focus(); titleEdit.select();
@@ -106,7 +118,7 @@ function commitRename() {
   const name = titleEdit.value.trim();
   if (name && name !== titleEl.textContent) {
     window.overlay.renameFile(name).then((r) => {
-      if (r && r.ok) { titleEl.textContent = r.name; toast('Renamed'); }
+      if (r && r.ok) { setTitle(r.name); toast('Renamed'); }
       else toast(r && r.error ? r.error : 'Rename failed');
     });
   }
@@ -162,7 +174,7 @@ updateLock();
 
 // ─── From main process ───────────────────────────────────────────────────────
 window.overlay.on('load-file', (d) => {
-  titleEl.textContent = d.name || 'Markdown Overlay';
+  setTitle(d.name);
   isText = !!d.isText;
   if (d.theme) applyTheme(d.theme);
   document.body.classList.remove('editing');
@@ -184,7 +196,7 @@ window.overlay.on('status', (msg) => toast(msg));
       if (s.theme) applyTheme(s.theme);
       if (typeof s.opacity === 'number') showOpacity(s.opacity);
       if (s.file) {
-        titleEl.textContent = s.name || 'Markdown Overlay';
+        setTitle(s.name);
         isText = !!s.isText;
         render(s.content);
       }

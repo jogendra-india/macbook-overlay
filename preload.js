@@ -13,6 +13,7 @@ const md = new MarkdownIt({
 contextBridge.exposeInMainWorld('overlay', {
   renderMarkdown: (text) => md.render(text || ''),
   saveContent: (content) => ipcRenderer.invoke('save-content', content),
+  ensureFile: () => ipcRenderer.invoke('ensure-file'),
   pickFile: () => ipcRenderer.invoke('pick-file'),
   newNote: () => ipcRenderer.invoke('new-note'),
   newOverlay: () => ipcRenderer.invoke('new-overlay'),

@@ -217,13 +217,31 @@ async function pickFile(entry) {
   if (!r.canceled && r.filePaths[0]) setFile(entry, r.filePaths[0]);
 }
 
-function newNote(entry) {
-  if (!entry) return;
+function freshNotePath() {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const file = path.join(NOTES_DIR, `note-${stamp}.md`);
+  return path.join(NOTES_DIR, `note-${stamp}.md`);
+}
+
+function newNote(entry) {
+  if (!entry) return;
+  const file = freshNotePath();
   fs.writeFileSync(file, '# New note\n\n');
   setFile(entry, file, true);
+}
+
+// Create + bind an empty backing file for an overlay that has none, so edits persist.
+function ensureFile(entry) {
+  if (!entry) return null;
+  if (!entry.rec.file) {
+    const file = freshNotePath();
+    fs.writeFileSync(file, '');
+    entry.rec.file = file;
+    watchFile(entry, file);
+    persist();
+    buildTrayMenu();
+  }
+  return { name: path.basename(entry.rec.file), file: entry.rec.file };
 }
 
 function renameFile(entry, rawName) {
@@ -278,10 +296,15 @@ function toggleAll() {
 ipcMain.handle('get-state', (e) => { const en = entryOf(e); return en ? payloadFor(en) : {}; });
 ipcMain.handle('save-content', (e, content) => {
   const en = entryOf(e);
-  if (!en || !en.rec.file) return { ok: false };
-  try { en.suppressUntil = Date.now() + 500; fs.writeFileSync(en.rec.file, content); return { ok: true }; }
-  catch (err) { return { ok: false, error: String(err) }; }
+  if (!en) return { ok: false };
+  if (!en.rec.file) ensureFile(en);   // backstop: bind a file if none yet
+  try {
+    en.suppressUntil = Date.now() + 500;
+    fs.writeFileSync(en.rec.file, content);
+    return { ok: true, name: path.basename(en.rec.file) };
+  } catch (err) { return { ok: false, error: String(err) }; }
 });
+ipcMain.handle('ensure-file', (e) => ensureFile(entryOf(e)));
 ipcMain.handle('pick-file', (e) => pickFile(entryOf(e)));
 ipcMain.handle('new-note', (e) => newNote(entryOf(e)));
 ipcMain.handle('new-overlay', () => { const en = createOverlay(newRecord(), overlays.size); persist(); return true; });

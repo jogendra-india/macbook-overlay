@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('overlay', {
   bumpOpacity: (delta) => ipcRenderer.invoke('bump-opacity', delta),
   openNotesDir: () => ipcRenderer.invoke('open-notes-dir'),
   setIgnore: (ignore) => ipcRenderer.send('set-ignore', ignore),
+  winClose: () => ipcRenderer.send('win-close'),
   winMinimize: () => ipcRenderer.invoke('win-minimize'),
   winMaximize: () => ipcRenderer.invoke('win-maximize'),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),

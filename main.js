@@ -113,8 +113,9 @@ function createOverlay(rec, stagger = 0) {
   // re-enables interaction over the title bar (forward keeps mousemove flowing).
   win.setIgnoreMouseEvents(true, { forward: true });
 
+  const wcId = win.webContents.id;   // capture now; webContents is gone after 'closed'
   const entry = { rec, win, watcher: null, suppressUntil: 0 };
-  overlays.set(win.webContents.id, entry);
+  overlays.set(wcId, entry);
 
   win.webContents.on('preload-error', (_e, p, err) =>
     console.error('[preload-error]', p, err && err.message));
@@ -126,13 +127,14 @@ function createOverlay(rec, stagger = 0) {
 
   win.loadFile('renderer.html');
   win.once('ready-to-show', () => win.showInactive());
-  win.on('focus', () => { lastActiveId = win.webContents.id; });
+  win.on('focus', () => { lastActiveId = wcId; });
   win.on('blur', () => send(entry, 'relock'));   // clicking away re-locks (click-through)
   win.on('resize', persistSoon);
   win.on('move', persistSoon);
   win.on('closed', () => {
     if (entry.watcher) entry.watcher.close();
-    overlays.delete(win.webContents.id);
+    overlays.delete(wcId);
+    if (lastActiveId === wcId) lastActiveId = null;
     persist();
     buildTrayMenu();
   });
@@ -290,6 +292,7 @@ ipcMain.on('set-ignore', (e, ignore) => {
   const en = entryOf(e);
   if (en) en.win.setIgnoreMouseEvents(!!ignore, { forward: true });
 });
+ipcMain.on('win-close', (e) => { const en = entryOf(e); if (en) en.win.close(); });
 ipcMain.handle('win-minimize', (e) => {
   const en = entryOf(e); if (!en) return false;
   const b = en.win.getBounds();

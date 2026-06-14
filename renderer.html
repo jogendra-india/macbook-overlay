@@ -130,6 +130,8 @@
   }
   /* Window controls (left of title) */
   button.icon.win { width: 22px; height: 20px; font-size: 13px; border-radius: 6px; }
+  button.icon.win.close { font-size: 16px; }
+  button.icon.win.close:hover { background: rgba(237,76,68,0.9); border-color: rgba(237,76,68,0.95); color: #fff; }
   /* Collapsed (minimized → roll up to the bar) */
   body.collapsed .content, body.collapsed #toast, body.collapsed .menu { display: none; }
 
@@ -178,6 +180,7 @@
 <body>
   <div class="shell">
     <div class="bar">
+      <button class="icon win close" id="btn-close" title="Close overlay (⌘W)">×</button>
       <button class="icon win" id="btn-min" title="Minimize (roll up)">–</button>
       <button class="icon win" id="btn-max" title="Maximize / restore">▢</button>
       <span class="title" id="title" title="Double-click to rename">Markdown Overlay</span>

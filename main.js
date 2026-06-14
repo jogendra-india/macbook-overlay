@@ -75,8 +75,17 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false, // allow preload to require('markdown-it')
     },
   });
+
+  // Diagnostics → /tmp/overlay.log
+  win.webContents.on('preload-error', (_e, p, err) =>
+    console.error('[preload-error]', p, err && err.message));
+  win.webContents.on('console-message', (_e, level, message, line, source) =>
+    console.log(`[renderer:${level}] ${message} (${source}:${line})`));
+  win.webContents.on('render-process-gone', (_e, d) =>
+    console.error('[render-gone]', JSON.stringify(d)));
 
   // The single flag that makes the window invisible to screen capture / sharing.
   win.setContentProtection(true);

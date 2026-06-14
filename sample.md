@@ -6,7 +6,7 @@ screen recording / share**, content protection is working. 🎉
 ## Checklist
 - [x] Always on top
 - [x] Frosted glass
-- [ ] Invisible while sharing  ← verify this now
+- [ x] Invisible while sharing  ← verify this now
 
 ## Code sample
 ```js

@@ -25,7 +25,6 @@ contextBridge.exposeInMainWorld('overlay', {
   dragTo: (x, y) => ipcRenderer.send('drag-to', { x, y }),
   dragEnd: () => ipcRenderer.send('drag-end'),
   winClose: () => ipcRenderer.send('win-close'),
-  winMinimize: () => ipcRenderer.invoke('win-minimize'),
   winMaximize: () => ipcRenderer.invoke('win-maximize'),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   getState: () => ipcRenderer.invoke('get-state'),

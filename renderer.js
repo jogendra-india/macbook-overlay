@@ -61,7 +61,7 @@ editor.addEventListener('input', () => {
 });
 
 // ─── Bar buttons ─────────────────────────────────────────────────────────────
-const btnMin = $('#btn-min'), btnMax = $('#btn-max'), btnMore = $('#btn-more');
+const btnMax = $('#btn-max'), btnMore = $('#btn-more');
 const opVal = $('#m-op-val'), themeVal = $('#m-theme-val');
 let theme = 'dark';
 
@@ -69,10 +69,6 @@ btnEdit.addEventListener('click', () => setEditing(!document.body.classList.cont
 $('#btn-close').addEventListener('click', () => window.overlay.winClose());
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'w') { e.preventDefault(); window.overlay.winClose(); }
-});
-btnMin.addEventListener('click', () => {
-  window.overlay.winMinimize().then((collapsed) =>
-    document.body.classList.toggle('collapsed', !!collapsed));
 });
 btnMax.addEventListener('click', () => {
   window.overlay.winMaximize().then((maxed) => btnMax.classList.toggle('active', !!maxed));

@@ -139,8 +139,6 @@
   button.icon.win { width: 18px; height: 18px; border-radius: 5px; }
   button.icon.win svg { width: 12px; height: 12px; }
   button.icon.win.close:hover { background: rgba(237,76,68,0.92); color: #fff; }
-  /* Collapsed (minimized → roll up to the bar) */
-  body.collapsed .content, body.collapsed #toast, body.collapsed .menu { display: none; }
 
   /* ⋯ overflow menu */
   .menu {
@@ -188,7 +186,6 @@
   <div class="shell">
     <div class="bar">
       <button class="icon win close" id="btn-close" title="Close overlay (⌘W)"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
-      <button class="icon win" id="btn-min" title="Minimize (roll up)"><svg viewBox="0 0 16 16"><path d="M4 8.5h8"/></svg></button>
       <button class="icon win" id="btn-max" title="Maximize / restore"><svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.6"/></svg></button>
       <span class="title" id="title" title="Double-click to rename">Markdown Overlay</span>
       <input class="title-edit" id="title-edit" spellcheck="false" />

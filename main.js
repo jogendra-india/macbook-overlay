@@ -54,10 +54,9 @@ function persist() {
   const arr = [];
   for (const e of overlays.values()) {
     if (!e.win || e.win.isDestroyed()) continue;
-    // Persist the "natural" bounds, not the collapsed/maximized ones.
+    // Persist the "natural" bounds, not the maximized ones.
     let bounds = e.win.getBounds();
-    if (e.collapsed && e.collapsedFrom) bounds = { ...bounds, height: e.collapsedFrom };
-    else if (e.maxed && e.maxFrom) bounds = e.maxFrom;
+    if (e.maxed && e.maxFrom) bounds = e.maxFrom;
     arr.push({
       id: e.rec.id, file: e.rec.file, opacity: e.rec.opacity,
       displayIndex: e.rec.displayIndex, theme: e.rec.theme || 'dark', bounds,
@@ -330,20 +329,6 @@ ipcMain.on('drag-to', (_e, p) => {
     Math.round(dragState.winStart[1] + (p.y - dragState.screenStart[1])));
 });
 ipcMain.on('drag-end', () => { dragState = null; persistSoon(); });
-ipcMain.handle('win-minimize', (e) => {
-  const en = entryOf(e); if (!en) return false;
-  const b = en.win.getBounds();
-  if (en.collapsed) {
-    en.win.setBounds({ ...b, height: en.collapsedFrom || 560 });
-    en.collapsed = false;
-  } else {
-    en.collapsedFrom = b.height;
-    en.win.setBounds({ ...b, height: 40 });   // roll up to the title bar
-    en.collapsed = true;
-  }
-  persistSoon();
-  return en.collapsed;
-});
 ipcMain.handle('win-maximize', (e) => {
   const en = entryOf(e); if (!en) return false;
   if (en.maxed) {

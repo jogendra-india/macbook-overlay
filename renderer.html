@@ -31,21 +31,22 @@
     backdrop-filter: blur(2px);
     position: relative;
   }
-  /* Title bar — draggable */
+  /* Title bar — drag handle (window is moved manually via JS) */
   .bar {
-    -webkit-app-region: drag;
     display: flex; align-items: center; gap: 8px;
     padding: 9px 12px;
     background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0));
     border-bottom: 1px solid var(--stroke);
     user-select: none;
+    cursor: grab;
   }
+  body.dragging .bar { cursor: grabbing; }
+  body.dragging, body.dragging * { cursor: grabbing !important; }
   .title { font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-           flex: 0 1 auto; max-width: 50%; cursor: default;
-           -webkit-app-region: no-drag; }
-  /* Draggable handle so the window can still be moved while the title is no-drag */
-  .drag-spacer { flex: 1; align-self: stretch; min-width: 20px; -webkit-app-region: drag; }
+           flex: 0 1 auto; max-width: 50%; cursor: grab; }
+  /* Filler that widens the draggable grab area between title and buttons */
+  .drag-spacer { flex: 1; align-self: stretch; min-width: 20px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
          box-shadow: 0 0 8px var(--accent); flex: none; }
   .actions { -webkit-app-region: no-drag; display: flex; gap: 6px; }

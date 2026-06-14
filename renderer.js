@@ -135,8 +135,9 @@ titleEdit.addEventListener('blur', commitRename);
 // buttons, at any time without unlocking. Only the CONTENT below is click-through
 // (clicks pass to whatever is underneath) until you unlock it with the 🔒 button.
 const btnLock = $('#btn-lock');
-let locked = true;          // refers to the content area only
-let interactiveNow = false;
+let locked = true;            // refers to the content area only
+let interactiveNow = true;    // window starts interactive (bar reliably catches the mouse)
+let dragging = false;
 
 function applyInteractive(on) {
   if (on === interactiveNow) return;
@@ -144,8 +145,9 @@ function applyInteractive(on) {
   window.overlay.setIgnore(!on); // ignore mouse = NOT interactive
 }
 function refresh(e) {
+  if (dragging) return;        // stay interactive throughout a drag
   const overBar = e && e.target && e.target.closest && e.target.closest('.bar');
-  // Bar is always hot (move/drag/buttons); content is hot only when unlocked.
+  // Bar always interactive (move/buttons); content interactive only when unlocked.
   applyInteractive(!locked || !!overBar);
 }
 function updateLock() {
@@ -157,7 +159,7 @@ function updateLock() {
 }
 
 document.addEventListener('mousemove', refresh);
-document.addEventListener('mouseleave', () => { if (locked) applyInteractive(false); });
+document.addEventListener('mouseleave', () => { if (locked && !dragging) applyInteractive(false); });
 btnLock.addEventListener('click', (e) => {
   e.stopPropagation();
   locked = !locked;
@@ -165,8 +167,27 @@ btnLock.addEventListener('click', (e) => {
   updateLock();
   toast(locked ? 'Content click-through' : 'Content interactive');
 });
-window.overlay.on('relock', () => { locked = true; applyInteractive(false); updateLock(); });
+window.overlay.on('relock', () => { if (!dragging) { locked = true; applyInteractive(false); updateLock(); } });
 updateLock();
+
+// ─── Manual window drag from the title bar ───────────────────────────────────
+const barEl = document.querySelector('.bar');
+barEl.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest('button') || e.target.closest('#title-edit')) return; // controls/rename
+  dragging = true;
+  applyInteractive(true);
+  document.body.classList.add('dragging');
+  window.overlay.dragBegin(e.screenX, e.screenY);
+  e.preventDefault();
+});
+window.addEventListener('mousemove', (e) => { if (dragging) window.overlay.dragTo(e.screenX, e.screenY); });
+window.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  dragging = false;
+  document.body.classList.remove('dragging');
+  window.overlay.dragEnd();
+});
 
 // ─── From main process ───────────────────────────────────────────────────────
 window.overlay.on('load-file', (d) => {

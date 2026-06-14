@@ -109,9 +109,9 @@ function createOverlay(rec, stagger = 0) {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setOpacity(rec.opacity);
   win.setBounds(rec.bounds || defaultBounds(rec.displayIndex, stagger));
-  // Start click-through: the mouse passes to whatever is underneath. The renderer
-  // re-enables interaction over the title bar (forward keeps mousemove flowing).
-  win.setIgnoreMouseEvents(true, { forward: true });
+  // Start interactive so the title bar reliably catches the mouse. The renderer
+  // switches the CONTENT to click-through (ignore mouse, forward keeps mousemove
+  // flowing) only while the pointer is over the content and the panel is locked.
 
   const wcId = win.webContents.id;   // capture now; webContents is gone after 'closed'
   const entry = { rec, win, watcher: null, suppressUntil: 0 };
@@ -316,6 +316,20 @@ ipcMain.on('set-ignore', (e, ignore) => {
   if (en) en.win.setIgnoreMouseEvents(!!ignore, { forward: true });
 });
 ipcMain.on('win-close', (e) => { const en = entryOf(e); if (en) en.win.close(); });
+
+// Manual window drag from the title bar (reliable even in click-through mode).
+let dragState = null;
+ipcMain.on('drag-begin', (e, p) => {
+  const en = entryOf(e); if (!en) return;
+  dragState = { win: en.win, winStart: en.win.getPosition(), screenStart: [p.x, p.y] };
+});
+ipcMain.on('drag-to', (_e, p) => {
+  if (!dragState || dragState.win.isDestroyed()) return;
+  dragState.win.setPosition(
+    Math.round(dragState.winStart[0] + (p.x - dragState.screenStart[0])),
+    Math.round(dragState.winStart[1] + (p.y - dragState.screenStart[1])));
+});
+ipcMain.on('drag-end', () => { dragState = null; persistSoon(); });
 ipcMain.handle('win-minimize', (e) => {
   const en = entryOf(e); if (!en) return false;
   const b = en.win.getBounds();

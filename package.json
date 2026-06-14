@@ -1,0 +1,26 @@
+{
+  "name": "macbook-overlay",
+  "version": "0.1.0",
+  "description": "A frosted always-on-top markdown overlay for macOS, invisible to screen sharing.",
+  "main": "main.js",
+  "author": "jogendra-india",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6"
+  },
+  "build": {
+    "appId": "com.jogendra.macbookoverlay",
+    "productName": "Markdown Overlay",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg"
+    }
+  }
+}

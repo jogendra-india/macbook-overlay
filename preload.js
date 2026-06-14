@@ -15,10 +15,14 @@ contextBridge.exposeInMainWorld('overlay', {
   saveContent: (content) => ipcRenderer.invoke('save-content', content),
   pickFile: () => ipcRenderer.invoke('pick-file'),
   newNote: () => ipcRenderer.invoke('new-note'),
+  newOverlay: () => ipcRenderer.invoke('new-overlay'),
+  renameFile: (name) => ipcRenderer.invoke('rename-file', name),
+  bumpOpacity: (delta) => ipcRenderer.invoke('bump-opacity', delta),
   openNotesDir: () => ipcRenderer.invoke('open-notes-dir'),
+  setIgnore: (ignore) => ipcRenderer.send('set-ignore', ignore),
   getState: () => ipcRenderer.invoke('get-state'),
   on: (channel, cb) => {
-    const allowed = ['load-file', 'file-changed', 'status', 'edit-mode'];
+    const allowed = ['load-file', 'file-changed', 'status', 'edit-mode', 'relock'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, data) => cb(data));
   },
 });

@@ -6,62 +6,80 @@ const {
 } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
-// ─── Paths & settings ────────────────────────────────────────────────────────
+// ─── Paths ───────────────────────────────────────────────────────────────────
 const USER_DATA = app.getPath('userData');
 const SETTINGS_FILE = path.join(USER_DATA, 'settings.json');
 const NOTES_DIR = path.join(app.getPath('documents'), 'Overlay Notes');
+const LAUNCH_AGENT = path.join(
+  app.getPath('home'), 'Library', 'LaunchAgents', 'com.jogendra.macbookoverlay.plist');
 
-const DEFAULTS = {
-  opacity: 0.95,
-  displayIndex: 0,
-  bounds: { width: 460, height: 620 },
-  lastFile: null,
-};
+const TEXT_EXTS = ['.txt', '.log', '.text'];
 
-function loadSettings() {
-  try {
-    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
-  } catch {
-    return { ...DEFAULTS };
-  }
+// ─── Settings model ──────────────────────────────────────────────────────────
+// settings = { overlays: [ { id, file, opacity, displayIndex, bounds } ] }
+function newRecord() {
+  return {
+    id: 'ov-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    file: null,
+    opacity: 0.95,
+    displayIndex: 0,
+    bounds: null,
+  };
 }
 
-function saveSettings() {
-  try {
-    fs.mkdirSync(USER_DATA, { recursive: true });
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-  } catch (e) {
-    console.error('saveSettings failed', e);
+function loadSettings() {
+  let s = {};
+  try { s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch {}
+  if (!Array.isArray(s.overlays) || s.overlays.length === 0) {
+    const r = newRecord();
+    if (s.lastFile) r.file = s.lastFile;          // migrate old single-file format
+    if (s.opacity) r.opacity = s.opacity;
+    s = { overlays: [r] };
   }
+  return s;
 }
 
 let settings = loadSettings();
-let win = null;
-let tray = null;
-let currentFile = settings.lastFile;
-let fileWatcher = null;
-let suppressWatchUntil = 0; // ignore our own writes to avoid reload loops
 
-// ─── Window ──────────────────────────────────────────────────────────────────
-function placeOnDisplay(index) {
+// Live windows: webContents.id -> { rec, win, watcher, suppressUntil }
+const overlays = new Map();
+let lastActiveId = null;
+let tray = null;
+let saveTimer = null;
+
+function persist() {
+  const arr = [];
+  for (const e of overlays.values()) {
+    if (!e.win || e.win.isDestroyed()) continue;
+    arr.push({
+      id: e.rec.id, file: e.rec.file, opacity: e.rec.opacity,
+      displayIndex: e.rec.displayIndex, bounds: e.win.getBounds(),
+    });
+  }
+  if (arr.length) settings.overlays = arr;
+  try {
+    fs.mkdirSync(USER_DATA, { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  } catch (e) { console.error('persist failed', e); }
+}
+function persistSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 400); }
+
+// ─── Window creation ─────────────────────────────────────────────────────────
+const TRAY_ICON =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAAQElEQVR42u3XQQoAIAhFQe9/6TqD+DGCeeB+FmJUJeU7ywMUBW2sBRAQ0OQ0AAEBAQG9AnnLgIBSIP+yL0BSpwvegI6ANZLmBQAAAABJRU5ErkJggg==';
+
+function defaultBounds(displayIndex, stagger) {
   const displays = screen.getAllDisplays();
-  const d = displays[Math.min(index, displays.length - 1)] || screen.getPrimaryDisplay();
-  const { x, y, width, height } = d.workArea;
-  const w = settings.bounds.width;
-  const h = settings.bounds.height;
-  win.setBounds({
-    x: Math.round(x + width - w - 24),
-    y: Math.round(y + 24),
-    width: w,
-    height: h,
-  });
+  const d = displays[Math.min(displayIndex, displays.length - 1)] || screen.getPrimaryDisplay();
+  const { x, y, width } = d.workArea;
+  const w = 460, h = 620, off = (stagger % 5) * 34;
+  return { x: Math.round(x + width - w - 24 - off), y: Math.round(y + 24 + off), width: w, height: h };
 }
 
-function createWindow() {
-  win = new BrowserWindow({
-    width: settings.bounds.width,
-    height: settings.bounds.height,
+function createOverlay(rec, stagger = 0) {
+  const win = new BrowserWindow({
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -71,6 +89,8 @@ function createWindow() {
     vibrancy: 'under-window',
     visualEffectState: 'active',
     fullscreenable: false,
+    minWidth: 260,
+    minHeight: 180,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -79,213 +99,284 @@ function createWindow() {
     },
   });
 
-  // Diagnostics → /tmp/overlay.log
+  win.setContentProtection(true);               // invisible to screen capture/sharing
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setOpacity(rec.opacity);
+  win.setBounds(rec.bounds || defaultBounds(rec.displayIndex, stagger));
+  // Start click-through: the mouse passes to whatever is underneath. The renderer
+  // re-enables interaction over the title bar (forward keeps mousemove flowing).
+  win.setIgnoreMouseEvents(true, { forward: true });
+
+  const entry = { rec, win, watcher: null, suppressUntil: 0 };
+  overlays.set(win.webContents.id, entry);
+
   win.webContents.on('preload-error', (_e, p, err) =>
     console.error('[preload-error]', p, err && err.message));
-  win.webContents.on('console-message', (_e, level, message, line, source) =>
-    console.log(`[renderer:${level}] ${message} (${source}:${line})`));
+  win.webContents.on('console-message', (_e, level, message, line, source) => {
+    if (level >= 2) console.error(`[renderer:${level}] ${message} (${source}:${line})`);
+  });
   win.webContents.on('render-process-gone', (_e, d) =>
     console.error('[render-gone]', JSON.stringify(d)));
 
-  // The single flag that makes the window invisible to screen capture / sharing.
-  win.setContentProtection(true);
-
-  // Float above everything, on every Space, even over fullscreen apps.
-  win.setAlwaysOnTop(true, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-
-  win.setOpacity(settings.opacity);
-  placeOnDisplay(settings.displayIndex);
-
   win.loadFile('renderer.html');
-
-  win.once('ready-to-show', () => {
-    win.showInactive();
-    if (currentFile) openFile(currentFile, false);
+  win.once('ready-to-show', () => win.showInactive());
+  win.on('focus', () => { lastActiveId = win.webContents.id; });
+  win.on('blur', () => send(entry, 'relock'));   // clicking away re-locks (click-through)
+  win.on('resize', persistSoon);
+  win.on('move', persistSoon);
+  win.on('closed', () => {
+    if (entry.watcher) entry.watcher.close();
+    overlays.delete(win.webContents.id);
+    persist();
+    buildTrayMenu();
   });
 
-  win.on('resize', () => {
-    const [width, height] = win.getSize();
-    settings.bounds = { width, height };
-    saveSettings();
-  });
-}
-
-function toggleWindow() {
-  if (!win) return;
-  if (win.isVisible()) win.hide();
-  else win.showInactive();
-}
-
-// ─── Opacity & displays ──────────────────────────────────────────────────────
-function bumpOpacity(delta) {
-  settings.opacity = Math.min(1, Math.max(0.15, +(settings.opacity + delta).toFixed(2)));
-  win.setOpacity(settings.opacity);
-  saveSettings();
-  send('status', `Opacity ${Math.round(settings.opacity * 100)}%`);
-}
-
-function cycleDisplay() {
-  const n = screen.getAllDisplays().length;
-  settings.displayIndex = (settings.displayIndex + 1) % n;
-  placeOnDisplay(settings.displayIndex);
-  saveSettings();
-  send('status', `Display ${settings.displayIndex + 1}/${n}`);
+  if (rec.file) watchFile(entry, rec.file);
   buildTrayMenu();
+  return entry;
+}
+
+// ─── Helpers to resolve which overlay an action targets ─────────────────────────
+function entryOf(eventOrWin) {
+  if (eventOrWin && eventOrWin.sender) return overlays.get(eventOrWin.sender.id);
+  return null;
+}
+function activeEntry() {
+  const f = BrowserWindow.getFocusedWindow();
+  if (f && overlays.has(f.webContents.id)) return overlays.get(f.webContents.id);
+  if (lastActiveId && overlays.has(lastActiveId)) return overlays.get(lastActiveId);
+  return overlays.values().next().value || null;
+}
+function send(entry, channel, payload) {
+  if (entry && entry.win && !entry.win.isDestroyed()) entry.win.webContents.send(channel, payload);
+}
+function isTextFile(file) {
+  return !!file && TEXT_EXTS.includes(path.extname(file).toLowerCase());
+}
+function payloadFor(entry) {
+  let content = '';
+  if (entry.rec.file) { try { content = fs.readFileSync(entry.rec.file, 'utf8'); } catch {} }
+  return {
+    file: entry.rec.file,
+    name: entry.rec.file ? path.basename(entry.rec.file) : null,
+    opacity: entry.rec.opacity,
+    isText: isTextFile(entry.rec.file),
+    content,
+  };
 }
 
 // ─── Files ───────────────────────────────────────────────────────────────────
-function watchFile(file) {
-  if (fileWatcher) { fileWatcher.close(); fileWatcher = null; }
+function watchFile(entry, file) {
+  if (entry.watcher) { entry.watcher.close(); entry.watcher = null; }
   if (!file) return;
   try {
-    fileWatcher = fs.watch(file, () => {
-      if (Date.now() < suppressWatchUntil) return; // ignore our own save
+    entry.watcher = fs.watch(file, () => {
+      if (Date.now() < entry.suppressUntil) return;
       try {
         const content = fs.readFileSync(file, 'utf8');
-        send('file-changed', { file, content });
+        send(entry, 'file-changed', { content, isText: isTextFile(file) });
       } catch {}
     });
   } catch (e) { console.error('watch failed', e); }
 }
 
-function openFile(file, focus = true) {
+function setFile(entry, file, enterEdit = false) {
   try {
-    const content = fs.readFileSync(file, 'utf8');
-    currentFile = file;
-    settings.lastFile = file;
-    saveSettings();
-    watchFile(file);
-    send('load-file', { file, name: path.basename(file), content });
-    if (focus && !win.isVisible()) win.showInactive();
+    entry.rec.file = file;
+    watchFile(entry, file);
+    persist();
+    send(entry, 'load-file', payloadFor(entry));
+    if (enterEdit) send(entry, 'edit-mode', true);
+    if (!entry.win.isVisible()) entry.win.showInactive();
     buildTrayMenu();
   } catch (e) {
     dialog.showErrorBox('Could not open file', String(e));
   }
 }
 
-async function pickFile() {
-  const r = await dialog.showOpenDialog(win, {
-    title: 'Open markdown file',
+async function pickFile(entry) {
+  if (!entry) return;
+  const r = await dialog.showOpenDialog(entry.win, {
+    title: 'Open file',
     defaultPath: fs.existsSync(NOTES_DIR) ? NOTES_DIR : app.getPath('documents'),
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }],
+    filters: [
+      { name: 'Text & Markdown', extensions: ['md', 'markdown', 'txt', 'text', 'log'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
     properties: ['openFile'],
   });
-  if (!r.canceled && r.filePaths[0]) openFile(r.filePaths[0]);
+  if (!r.canceled && r.filePaths[0]) setFile(entry, r.filePaths[0]);
 }
 
-function newNote() {
+function newNote(entry) {
+  if (!entry) return;
   fs.mkdirSync(NOTES_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const file = path.join(NOTES_DIR, `note-${stamp}.md`);
-  fs.writeFileSync(file, `# New note\n\n`);
-  openFile(file);
-  send('edit-mode', true);
+  fs.writeFileSync(file, '# New note\n\n');
+  setFile(entry, file, true);
 }
 
-// Autosave from the editor. Debounced on the renderer side.
-ipcMain.handle('save-content', (_e, content) => {
-  if (!currentFile) return { ok: false };
+function renameFile(entry, rawName) {
+  if (!entry || !entry.rec.file) return { ok: false, error: 'no file' };
+  let name = String(rawName || '').trim().replace(/[\/\\]/g, '');
+  if (!name) return { ok: false, error: 'empty name' };
+  const dir = path.dirname(entry.rec.file);
+  if (!path.extname(name)) name += path.extname(entry.rec.file) || '.md';
+  const dest = path.join(dir, name);
+  if (dest === entry.rec.file) return { ok: true, name };
+  if (fs.existsSync(dest)) return { ok: false, error: 'name already exists' };
   try {
-    suppressWatchUntil = Date.now() + 400;
-    fs.writeFileSync(currentFile, content);
-    return { ok: true };
+    entry.suppressUntil = Date.now() + 600;
+    fs.renameSync(entry.rec.file, dest);
+    entry.rec.file = dest;
+    watchFile(entry, dest);
+    persist();
+    buildTrayMenu();
+    return { ok: true, name: path.basename(dest) };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
+}
+
+// ─── Opacity & displays ──────────────────────────────────────────────────────
+function bumpOpacity(entry, delta) {
+  if (!entry) return 0;
+  entry.rec.opacity = Math.min(1, Math.max(0.2, +(entry.rec.opacity + delta).toFixed(2)));
+  entry.win.setOpacity(entry.rec.opacity);
+  persistSoon();
+  send(entry, 'status', `Opacity ${Math.round(entry.rec.opacity * 100)}%`);
+  return entry.rec.opacity;
+}
+
+function moveToDisplay(entry, index) {
+  const n = screen.getAllDisplays().length;
+  entry.rec.displayIndex = ((index % n) + n) % n;
+  entry.win.setBounds(defaultBounds(entry.rec.displayIndex, 0));
+  persist();
+  send(entry, 'status', `Display ${entry.rec.displayIndex + 1}/${n}`);
+  buildTrayMenu();
+}
+
+function toggleAll() {
+  const anyVisible = [...overlays.values()].some((e) => e.win.isVisible());
+  for (const e of overlays.values()) {
+    if (anyVisible) e.win.hide(); else e.win.showInactive();
+  }
+}
+
+// ─── IPC ─────────────────────────────────────────────────────────────────────
+ipcMain.handle('get-state', (e) => { const en = entryOf(e); return en ? payloadFor(en) : {}; });
+ipcMain.handle('save-content', (e, content) => {
+  const en = entryOf(e);
+  if (!en || !en.rec.file) return { ok: false };
+  try { en.suppressUntil = Date.now() + 500; fs.writeFileSync(en.rec.file, content); return { ok: true }; }
+  catch (err) { return { ok: false, error: String(err) }; }
+});
+ipcMain.handle('pick-file', (e) => pickFile(entryOf(e)));
+ipcMain.handle('new-note', (e) => newNote(entryOf(e)));
+ipcMain.handle('new-overlay', () => { const en = createOverlay(newRecord(), overlays.size); persist(); return true; });
+ipcMain.handle('rename-file', (e, name) => renameFile(entryOf(e), name));
+ipcMain.handle('bump-opacity', (e, delta) => bumpOpacity(entryOf(e), delta));
+ipcMain.handle('open-notes-dir', () => { fs.mkdirSync(NOTES_DIR, { recursive: true }); shell.openPath(NOTES_DIR); });
+ipcMain.on('set-ignore', (e, ignore) => {
+  const en = entryOf(e);
+  if (en) en.win.setIgnoreMouseEvents(!!ignore, { forward: true });
 });
 
-ipcMain.handle('pick-file', () => pickFile());
-ipcMain.handle('new-note', () => newNote());
-ipcMain.handle('open-notes-dir', () => {
-  fs.mkdirSync(NOTES_DIR, { recursive: true });
-  shell.openPath(NOTES_DIR);
-});
-ipcMain.handle('get-state', () => {
-  let content = '';
-  if (currentFile) { try { content = fs.readFileSync(currentFile, 'utf8'); } catch {} }
-  return {
-    file: currentFile,
-    name: currentFile ? path.basename(currentFile) : null,
-    opacity: settings.opacity,
-    content,
-  };
-});
+// ─── Auto-start (LaunchAgent — reliable for the unpackaged dev app too) ────────
+function loginEnabled() { return fs.existsSync(LAUNCH_AGENT); }
+function setLogin(on) {
+  if (on) {
+    const plist =
+`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jogendra.macbookoverlay</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${process.execPath}</string>
+    <string>${app.getAppPath()}</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+`;
+    try {
+      fs.mkdirSync(path.dirname(LAUNCH_AGENT), { recursive: true });
+      fs.writeFileSync(LAUNCH_AGENT, plist);
+      execFile('/bin/launchctl', ['load', '-w', LAUNCH_AGENT], () => {});
+    } catch (e) { console.error('setLogin on failed', e); }
+  } else {
+    execFile('/bin/launchctl', ['unload', '-w', LAUNCH_AGENT], () => {
+      try { fs.unlinkSync(LAUNCH_AGENT); } catch {}
+    });
+  }
+  setTimeout(buildTrayMenu, 200);
+}
 
-// ─── Tray (menu-bar control) ─────────────────────────────────────────────────
+// ─── Tray ────────────────────────────────────────────────────────────────────
 function buildTrayMenu() {
   if (!tray) return;
   const displays = screen.getAllDisplays();
   const menu = Menu.buildFromTemplate([
-    { label: win && win.isVisible() ? 'Hide overlay' : 'Show overlay', accelerator: 'Alt+Cmd+O', click: toggleWindow },
+    { label: 'Show / hide all', accelerator: 'Alt+Cmd+O', click: toggleAll },
+    { label: 'New overlay', accelerator: 'Alt+Cmd+T', click: () => { createOverlay(newRecord(), overlays.size); persist(); } },
     { type: 'separator' },
-    { label: 'Open file…', accelerator: 'Alt+Cmd+F', click: pickFile },
-    { label: 'New note', accelerator: 'Alt+Cmd+N', click: newNote },
+    { label: 'Open file…', accelerator: 'Alt+Cmd+F', click: () => pickFile(activeEntry()) },
+    { label: 'New note', accelerator: 'Alt+Cmd+N', click: () => newNote(activeEntry()) },
     { label: 'Open notes folder', click: () => { fs.mkdirSync(NOTES_DIR, { recursive: true }); shell.openPath(NOTES_DIR); } },
     { type: 'separator' },
     {
-      label: 'Show on display',
+      label: 'Move active to display',
       submenu: displays.map((d, i) => ({
-        label: `Display ${i + 1}  (${d.size.width}×${d.size.height})${i === settings.displayIndex ? '  ✓' : ''}`,
-        click: () => { settings.displayIndex = i; placeOnDisplay(i); saveSettings(); buildTrayMenu(); },
+        label: `Display ${i + 1}  (${d.size.width}×${d.size.height})`,
+        click: () => { const en = activeEntry(); if (en) moveToDisplay(en, i); },
       })),
     },
     {
-      label: 'Opacity',
+      label: 'Opacity (active)',
       submenu: [
-        { label: 'Increase', accelerator: 'Alt+Cmd+=', click: () => bumpOpacity(0.1) },
-        { label: 'Decrease', accelerator: 'Alt+Cmd+-', click: () => bumpOpacity(-0.1) },
-        { label: 'Reset', accelerator: 'Alt+Cmd+0', click: () => { settings.opacity = 0.95; win.setOpacity(0.95); saveSettings(); } },
+        { label: 'Increase', accelerator: 'Alt+Cmd+=', click: () => bumpOpacity(activeEntry(), 0.1) },
+        { label: 'Decrease', accelerator: 'Alt+Cmd+-', click: () => bumpOpacity(activeEntry(), -0.1) },
       ],
     },
     { type: 'separator' },
-    {
-      label: 'Open at login',
-      type: 'checkbox',
-      checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
-    },
+    { label: `Overlays open: ${overlays.size}`, enabled: false },
+    { label: 'Open at login', type: 'checkbox', checked: loginEnabled(), click: (i) => setLogin(i.checked) },
     { label: 'Quit', accelerator: 'Cmd+Q', role: 'quit' },
   ]);
   tray.setContextMenu(menu);
 }
 
-// 36×36 template PNG (a "▣" glyph) embedded so there is no binary asset to sync.
-const TRAY_ICON =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAAQElEQVR42u3XQQoAIAhFQe9/6TqD+DGCeeB+FmJUJeU7ywMUBW2sBRAQ0OQ0AAEBAQG9AnnLgIBSIP+yL0BSpwvegI6ANZLmBQAAAABJRU5ErkJggg==';
-
 function createTray() {
   const img = nativeImage.createFromDataURL(TRAY_ICON);
-  img.setTemplateImage(true); // adapts to light/dark menu bar
+  img.setTemplateImage(true);
   tray = new Tray(img);
   tray.setToolTip('Markdown Overlay');
-  tray.on('click', toggleWindow); // left-click toggles
+  tray.on('click', toggleAll);
   buildTrayMenu();
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function send(channel, payload) {
-  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
 // ─── App lifecycle ───────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  if (app.dock) app.dock.hide(); // menu-bar app, no dock icon
-  createWindow();
+  if (app.dock) app.dock.hide();
+  settings.overlays.forEach((rec, i) => createOverlay({ ...newRecord(), ...rec }, i));
   createTray();
 
-  globalShortcut.register('Alt+Cmd+O', toggleWindow);
-  globalShortcut.register('Alt+Cmd+=', () => bumpOpacity(0.1));
-  globalShortcut.register('Alt+Cmd+-', () => bumpOpacity(-0.1));
-  globalShortcut.register('Alt+Cmd+0', () => { settings.opacity = 0.95; win.setOpacity(0.95); saveSettings(); });
-  globalShortcut.register('Alt+Cmd+Right', cycleDisplay);
-  globalShortcut.register('Alt+Cmd+F', pickFile);
-  globalShortcut.register('Alt+Cmd+N', newNote);
+  globalShortcut.register('Alt+Cmd+O', toggleAll);
+  globalShortcut.register('Alt+Cmd+T', () => { createOverlay(newRecord(), overlays.size); persist(); });
+  globalShortcut.register('Alt+Cmd+=', () => bumpOpacity(activeEntry(), 0.1));
+  globalShortcut.register('Alt+Cmd+-', () => bumpOpacity(activeEntry(), -0.1));
+  globalShortcut.register('Alt+Cmd+0', () => { const e = activeEntry(); if (e) { e.rec.opacity = 0.95; e.win.setOpacity(0.95); persistSoon(); } });
+  globalShortcut.register('Alt+Cmd+Right', () => { const e = activeEntry(); if (e) moveToDisplay(e, e.rec.displayIndex + 1); });
+  globalShortcut.register('Alt+Cmd+F', () => pickFile(activeEntry()));
+  globalShortcut.register('Alt+Cmd+N', () => newNote(activeEntry()));
 });
 
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-  if (fileWatcher) fileWatcher.close();
-});
-
-app.on('window-all-closed', (e) => { /* keep running as a menu-bar app */ });
+app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('window-all-closed', () => { /* keep running as a menu-bar app */ });

@@ -107,19 +107,42 @@
   }
   #toast.show { opacity: 1; }
   .saved { color: var(--muted); font-size: 11px; margin-left: 4px; }
+  .sep { width: 1px; height: 16px; background: var(--stroke); margin: 0 3px; }
+  /* Rename input (shown on title double-click) */
+  .title-edit {
+    -webkit-app-region: no-drag; display: none; flex: 1;
+    font-size: 12.5px; font-weight: 600; color: var(--text);
+    background: var(--bg-solid); border: 1px solid var(--accent);
+    border-radius: 6px; padding: 3px 6px; outline: none;
+  }
+  body.renaming .title { display: none; }
+  body.renaming .title-edit { display: block; }
+  /* Plain-text (.txt) view */
+  #view pre.plain {
+    margin: 0; white-space: pre-wrap; word-break: break-word;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px;
+    line-height: 1.55; background: none; border: 0; padding: 0;
+  }
 </style>
 </head>
 <body>
   <div class="shell">
     <div class="bar">
       <span class="dot"></span>
-      <span class="title" id="title">Markdown Overlay</span>
+      <span class="title" id="title" title="Double-click to rename">Markdown Overlay</span>
+      <input class="title-edit" id="title-edit" spellcheck="false" />
       <span class="saved" id="saved"></span>
       <div class="actions">
+        <button class="icon" id="btn-lock" title="Click-through lock">🔒</button>
+        <span class="sep"></span>
+        <button class="icon" id="btn-op-down" title="Less opaque (⌥⌘-)">◐</button>
+        <button class="icon" id="btn-op-up"   title="More opaque (⌥⌘=)">◑</button>
+        <span class="sep"></span>
         <button class="icon" id="btn-edit"  title="Toggle edit (autosaves)">✎</button>
         <button class="icon" id="btn-new"   title="New note">＋</button>
-        <button class="icon" id="btn-open"  title="Open file">📂</button>
+        <button class="icon" id="btn-open"  title="Open file (.md / .txt)">📂</button>
         <button class="icon" id="btn-dir"   title="Open notes folder">🗂</button>
+        <button class="icon" id="btn-overlay" title="New overlay window (⌥⌘T)">⧉</button>
       </div>
     </div>
     <div class="content">

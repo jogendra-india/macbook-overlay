@@ -442,7 +442,7 @@ function createTray() {
   img.setTemplateImage(true);
   tray = new Tray(img);
   tray.setToolTip('Markdown Overlay');
-  tray.on('click', toggleAll);
+  // Click opens the menu only (via setContextMenu); use the menu item to show/hide.
   buildTrayMenu();
 }
 

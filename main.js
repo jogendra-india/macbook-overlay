@@ -369,6 +369,11 @@ ipcMain.handle('set-theme', (e, theme) => {
 function loginEnabled() { return fs.existsSync(LAUNCH_AGENT); }
 function setLogin(on) {
   if (on) {
+    // Packaged: launch the app binary directly. Dev: launch electron with the project path.
+    const args = app.isPackaged
+      ? [process.execPath]
+      : [process.execPath, app.getAppPath()];
+    const progArgs = args.map((a) => `    <string>${a}</string>`).join('\n');
     const plist =
 `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -377,8 +382,7 @@ function setLogin(on) {
   <key>Label</key><string>com.jogendra.macbookoverlay</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${process.execPath}</string>
-    <string>${app.getAppPath()}</string>
+${progArgs}
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><false/>

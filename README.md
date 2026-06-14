@@ -32,6 +32,14 @@ npm start
 ```bash
 npm run dist
 ```
+Outputs to `dist/`:
+- `dist/mac-arm64/Markdown Overlay.app` — the app bundle
+- `dist/Markdown Overlay-<ver>-arm64.dmg` — installer
+
+Install by dragging the `.app` into `~/Applications` (or `/Applications`), then
+launch it and enable **Open at login** from the menu-bar `▣` menu. The app is
+ad-hoc signed (no Apple Developer ID), so the first launch may need a
+right-click → **Open** to get past Gatekeeper.
 
 ## Caveat
 Content protection hides the window from *digital* capture only. A phone photo of

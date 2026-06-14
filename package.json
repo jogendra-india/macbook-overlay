@@ -13,14 +13,19 @@
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {
-    "electron": "^31.7.6"
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "com.jogendra.macbookoverlay",
     "productName": "Markdown Overlay",
+    "directories": { "buildResources": "build", "output": "dist" },
+    "files": ["main.js", "preload.js", "renderer.html", "renderer.js", "package.json"],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dmg"
+      "target": ["dmg", "dir"],
+      "icon": "build/icon.png",
+      "identity": null
     }
   }
 }

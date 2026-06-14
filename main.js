@@ -73,7 +73,7 @@ function persistSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persist
 
 // ─── Window creation ─────────────────────────────────────────────────────────
 const TRAY_ICON =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAAQElEQVR42u3XQQoAIAhFQe9/6TqD+DGCeeB+FmJUJeU7ywMUBW2sBRAQ0OQ0AAEBAQG9AnnLgIBSIP+yL0BSpwvegI6ANZLmBQAAAABJRU5ErkJggg==';
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAsCAYAAAAehFoBAAAAjUlEQVR42u2XwQ2AIAxF2YETC3RBR2AWl2IZ7QES4klQ0Op7yT+2/WnaUJwDAACAj+FV4aT8k0YXVVJtjUo5diprh9Gj1pmdLUWjShpGQnJMiZ/S6VSZ7SVW4zF8wUp35EIeqfIMXcRQFQovyINhDGMYwxjG8M+fZnPHj8nz0twBb/KLZPITCgAAALezAw+ljjkY/QyBAAAAAElFTkSuQmCC';
 
 function defaultBounds(displayIndex, stagger) {
   const displays = screen.getAllDisplays();

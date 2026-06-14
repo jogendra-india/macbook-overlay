@@ -130,12 +130,12 @@ titleEdit.addEventListener('keydown', (e) => {
 });
 titleEdit.addEventListener('blur', commitRename);
 
-// ─── Click-through: window is transparent to the mouse unless interacting ─────
-// Locked  = clicks pass through to whatever is underneath (only the title bar is
-//           hot, so you can grab/drag/unlock it).
-// Unlocked = whole panel interactive (scroll/edit/select). Clicking away re-locks.
+// ─── Click-through ────────────────────────────────────────────────────────────
+// The TITLE BAR is always interactive — grab it to move the window, or use its
+// buttons, at any time without unlocking. Only the CONTENT below is click-through
+// (clicks pass to whatever is underneath) until you unlock it with the 🔒 button.
 const btnLock = $('#btn-lock');
-let locked = true;
+let locked = true;          // refers to the content area only
 let interactiveNow = false;
 
 function applyInteractive(on) {
@@ -145,29 +145,25 @@ function applyInteractive(on) {
 }
 function refresh(e) {
   const overBar = e && e.target && e.target.closest && e.target.closest('.bar');
+  // Bar is always hot (move/drag/buttons); content is hot only when unlocked.
   applyInteractive(!locked || !!overBar);
 }
 function updateLock() {
   btnLock.textContent = locked ? '🔒' : '🔓';
   btnLock.classList.toggle('active', !locked);
   btnLock.title = locked
-    ? 'Click-through ON — only the title bar is active (click bar to interact)'
-    : 'Interactive — click to lock (make click-through)';
+    ? 'Content is click-through — click to interact with the note (title bar always moves the window)'
+    : 'Content is interactive — click to make it click-through';
 }
 
 document.addEventListener('mousemove', refresh);
 document.addEventListener('mouseleave', () => { if (locked) applyInteractive(false); });
-// Grabbing the title bar unlocks the panel for scroll/edit/select.
-$('.bar').addEventListener('mousedown', (e) => {
-  if (e.target.closest('#btn-lock')) return; // the lock button handles itself
-  if (locked) { locked = false; applyInteractive(true); updateLock(); }
-});
 btnLock.addEventListener('click', (e) => {
   e.stopPropagation();
   locked = !locked;
   applyInteractive(!locked);
   updateLock();
-  toast(locked ? 'Click-through on' : 'Interactive');
+  toast(locked ? 'Content click-through' : 'Content interactive');
 });
 window.overlay.on('relock', () => { locked = true; applyInteractive(false); updateLock(); });
 updateLock();

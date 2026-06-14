@@ -33,10 +33,13 @@ function toast(msg) {
 }
 
 async function setEditing(on) {
-  if (on && !hasFile) {
-    // No file bound yet — create one so edits actually persist.
-    const r = await window.overlay.ensureFile();
-    if (r && r.name) setTitle(r.name);
+  if (on) {
+    if (!hasFile) {
+      // No file bound yet — create one so edits actually persist.
+      const r = await window.overlay.ensureFile();
+      if (r && r.name) setTitle(r.name);
+    }
+    unlock();                       // editing needs an interactive content area
   }
   document.body.classList.toggle('editing', on);
   btnEdit.classList.toggle('active', on);
@@ -83,7 +86,10 @@ function applyTheme(t) {
 }
 
 // ─── ⋯ overflow menu ─────────────────────────────────────────────────────────
-function setMenu(open) { document.body.classList.toggle('menu-open', open); }
+function setMenu(open) {
+  document.body.classList.toggle('menu-open', open);
+  applyInteractive(contentInteractive());   // menu is usable regardless of lock
+}
 btnMore.addEventListener('click', (e) => { e.stopPropagation(); setMenu(!document.body.classList.contains('menu-open')); });
 document.addEventListener('mousedown', (e) => {            // click outside closes
   if (!e.target.closest('#menu') && !e.target.closest('#btn-more')) setMenu(false);
@@ -144,11 +150,17 @@ function applyInteractive(on) {
   interactiveNow = on;
   window.overlay.setIgnore(!on); // ignore mouse = NOT interactive
 }
+// The content area must accept the mouse when unlocked, when the ⋯ menu is open,
+// or while editing — even if the panel is otherwise locked/click-through.
+function contentInteractive() {
+  return !locked
+    || document.body.classList.contains('menu-open')
+    || document.body.classList.contains('editing');
+}
 function refresh(e) {
   if (dragging) return;        // stay interactive throughout a drag
   const overBar = e && e.target && e.target.closest && e.target.closest('.bar');
-  // Bar always interactive (move/buttons); content interactive only when unlocked.
-  applyInteractive(!locked || !!overBar);
+  applyInteractive(contentInteractive() || !!overBar);
 }
 function updateLock() {
   btnLock.textContent = locked ? '🔒' : '🔓';
@@ -157,17 +169,18 @@ function updateLock() {
     ? 'Content is click-through — click to interact with the note (title bar always moves the window)'
     : 'Content is interactive — click to make it click-through';
 }
+function unlock() { if (locked) { locked = false; updateLock(); } applyInteractive(true); }
 
 document.addEventListener('mousemove', refresh);
-document.addEventListener('mouseleave', () => { if (locked && !dragging) applyInteractive(false); });
+document.addEventListener('mouseleave', () => { if (!contentInteractive() && !dragging) applyInteractive(false); });
 btnLock.addEventListener('click', (e) => {
   e.stopPropagation();
   locked = !locked;
-  applyInteractive(!locked);
+  applyInteractive(contentInteractive());
   updateLock();
   toast(locked ? 'Content click-through' : 'Content interactive');
 });
-window.overlay.on('relock', () => { if (!dragging) { locked = true; applyInteractive(false); updateLock(); } });
+window.overlay.on('relock', () => { if (!dragging) { locked = true; applyInteractive(contentInteractive()); updateLock(); } });
 updateLock();
 
 // ─── Manual window drag from the title bar ───────────────────────────────────

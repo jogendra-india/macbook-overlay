@@ -45,28 +45,12 @@ editor.addEventListener('input', () => {
   }, 500);
 });
 
-// ─── Toolbar ─────────────────────────────────────────────────────────────────
-btnEdit.addEventListener('click', () => setEditing(!document.body.classList.contains('editing')));
-$('#btn-new').addEventListener('click', () => window.overlay.newNote());
-$('#btn-open').addEventListener('click', () => window.overlay.pickFile());
-$('#btn-dir').addEventListener('click', () => window.overlay.openNotesDir());
-$('#btn-overlay').addEventListener('click', () => window.overlay.newOverlay());
-$('#btn-op-up').addEventListener('click', () => window.overlay.bumpOpacity(0.1));
-$('#btn-op-down').addEventListener('click', () => window.overlay.bumpOpacity(-0.1));
-
-// ─── Window controls + theme ─────────────────────────────────────────────────
-const btnTheme = $('#btn-theme'), btnMin = $('#btn-min'), btnMax = $('#btn-max');
+// ─── Bar buttons ─────────────────────────────────────────────────────────────
+const btnMin = $('#btn-min'), btnMax = $('#btn-max'), btnMore = $('#btn-more');
+const opVal = $('#m-op-val'), themeVal = $('#m-theme-val');
 let theme = 'dark';
 
-function applyTheme(t) {
-  theme = t === 'light' ? 'light' : 'dark';
-  document.body.classList.toggle('light', theme === 'light');
-  btnTheme.textContent = theme === 'light' ? '☀' : '☾';
-}
-btnTheme.addEventListener('click', () => {
-  applyTheme(theme === 'light' ? 'dark' : 'light');
-  window.overlay.setTheme(theme);
-});
+btnEdit.addEventListener('click', () => setEditing(!document.body.classList.contains('editing')));
 btnMin.addEventListener('click', () => {
   window.overlay.winMinimize().then((collapsed) =>
     document.body.classList.toggle('collapsed', !!collapsed));
@@ -74,6 +58,36 @@ btnMin.addEventListener('click', () => {
 btnMax.addEventListener('click', () => {
   window.overlay.winMaximize().then((maxed) => btnMax.classList.toggle('active', !!maxed));
 });
+
+// ─── Theme ───────────────────────────────────────────────────────────────────
+function applyTheme(t) {
+  theme = t === 'light' ? 'light' : 'dark';
+  document.body.classList.toggle('light', theme === 'light');
+  if (themeVal) themeVal.textContent = theme === 'light' ? 'Light' : 'Dark';
+}
+
+// ─── ⋯ overflow menu ─────────────────────────────────────────────────────────
+function setMenu(open) { document.body.classList.toggle('menu-open', open); }
+btnMore.addEventListener('click', (e) => { e.stopPropagation(); setMenu(!document.body.classList.contains('menu-open')); });
+document.addEventListener('mousedown', (e) => {            // click outside closes
+  if (!e.target.closest('#menu') && !e.target.closest('#btn-more')) setMenu(false);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+
+// Opacity & theme stay open (live tweaking); actions close the menu.
+$('#m-op-down').addEventListener('click', () => window.overlay.bumpOpacity(-0.1).then(showOpacity));
+$('#m-op-up').addEventListener('click', () => window.overlay.bumpOpacity(0.1).then(showOpacity));
+$('#m-theme').addEventListener('click', () => {
+  applyTheme(theme === 'light' ? 'dark' : 'light');
+  window.overlay.setTheme(theme);
+});
+function runAndClose(fn) { setMenu(false); fn(); }
+$('#m-new').addEventListener('click', () => runAndClose(() => window.overlay.newNote()));
+$('#m-open').addEventListener('click', () => runAndClose(() => window.overlay.pickFile()));
+$('#m-overlay').addEventListener('click', () => runAndClose(() => window.overlay.newOverlay()));
+$('#m-dir').addEventListener('click', () => runAndClose(() => window.overlay.openNotesDir()));
+
+function showOpacity(v) { if (typeof v === 'number' && opVal) opVal.textContent = Math.round(v * 100) + '%'; }
 
 // ─── Rename: double-click the title ──────────────────────────────────────────
 function startRename() {
@@ -164,6 +178,7 @@ window.overlay.on('status', (msg) => toast(msg));
     const s = await window.overlay.getState();
     if (s) {
       if (s.theme) applyTheme(s.theme);
+      if (typeof s.opacity === 'number') showOpacity(s.opacity);
       if (s.file) {
         titleEl.textContent = s.name || 'Markdown Overlay';
         isText = !!s.isText;

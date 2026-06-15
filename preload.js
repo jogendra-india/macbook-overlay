@@ -27,9 +27,13 @@ contextBridge.exposeInMainWorld('overlay', {
   winClose: () => ipcRenderer.send('win-close'),
   winMaximize: () => ipcRenderer.invoke('win-maximize'),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
+  setAutoScroll: (patch) => ipcRenderer.invoke('set-auto-scroll', patch),
   getState: () => ipcRenderer.invoke('get-state'),
   on: (channel, cb) => {
-    const allowed = ['load-file', 'file-changed', 'status', 'edit-mode', 'relock'];
+    const allowed = [
+      'load-file', 'file-changed', 'status', 'edit-mode', 'relock',
+      'auto-scroll-cmd', 'auto-scroll-tick',
+    ];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, data) => cb(data));
   },
 });

@@ -1,7 +1,8 @@
 'use strict';
 
 const $ = (s) => document.querySelector(s);
-const view = $('#view'), editor = $('#editor'), titleEl = $('#title'),
+const view = $('#view'), editor = $('#editor'), contentEl = $('.content'),
+      titleEl = $('#title'),
       titleEdit = $('#title-edit'), savedEl = $('#saved'), btnEdit = $('#btn-edit');
 let currentText = '';
 let isText = false;
@@ -107,6 +108,105 @@ $('#m-dir').addEventListener('click', () => runAndClose(() => window.overlay.ope
 
 function showOpacity(v) { if (typeof v === 'number' && opVal) opVal.textContent = Math.round(v * 100) + '%'; }
 
+// ─── Auto-scroll (runs in renderer — keeps going when unfocused / click-through) ─
+const btnScroll = $('#btn-scroll');
+const scrollVal = $('#m-scroll-val');
+const scrollSpeedEl = $('#m-scroll-speed');
+const scrollPauseLabel = $('#m-scroll-pause-label');
+const SCROLL_MIN = 3;
+const SCROLL_MAX = 80;
+const SCROLL_STEP = 2;
+let autoScroll = { enabled: false, paused: false, speed: 12 };
+let scrollPos = null;
+
+function scrollEl() {
+  return document.body.classList.contains('editing') ? editor : contentEl;
+}
+
+function scrollLabel() {
+  if (!autoScroll.enabled) return 'Off';
+  return autoScroll.paused ? 'Paused' : `${autoScroll.speed} px/s`;
+}
+
+function refreshScrollUI() {
+  const on = autoScroll.enabled && !autoScroll.paused;
+  btnScroll.classList.toggle('active', on);
+  btnScroll.classList.toggle('scroll-on', autoScroll.enabled);
+  if (scrollVal) scrollVal.textContent = scrollLabel();
+  if (scrollSpeedEl) scrollSpeedEl.textContent = String(autoScroll.speed);
+  if (scrollPauseLabel) {
+    scrollPauseLabel.textContent = autoScroll.paused ? 'Resume scroll' : 'Pause scroll';
+  }
+}
+
+function resetScrollPos() {
+  scrollPos = null;
+}
+
+function applyScrollTick(delta) {
+  if (!autoScroll.enabled || autoScroll.paused) return;
+  const el = scrollEl();
+  if (!el) return;
+  const max = el.scrollHeight - el.clientHeight;
+  if (max <= 1) return;
+  if (scrollPos === null || Math.abs(scrollPos - el.scrollTop) > 2) {
+    scrollPos = el.scrollTop;
+  }
+  scrollPos += delta;
+  if (scrollPos >= max) scrollPos = 0;
+  if (scrollPos < 0) scrollPos = 0;
+  el.scrollTop = scrollPos;
+}
+
+async function persistAutoScroll(patch) {
+  autoScroll = { ...autoScroll, ...patch };
+  if (typeof autoScroll.speed === 'number') {
+    autoScroll.speed = Math.min(SCROLL_MAX, Math.max(SCROLL_MIN, Math.round(autoScroll.speed)));
+  }
+  if (!autoScroll.enabled || autoScroll.paused) resetScrollPos();
+  refreshScrollUI();
+  try { await window.overlay.setAutoScroll(autoScroll); } catch (e) { console.error(e); }
+}
+
+async function setAutoScrollEnabled(on) {
+  await persistAutoScroll({ enabled: on, paused: false });
+  toast(on ? 'Auto-scroll on' : 'Auto-scroll off');
+}
+
+async function toggleAutoScrollPause() {
+  if (!autoScroll.enabled) {
+    await setAutoScrollEnabled(true);
+    return;
+  }
+  await persistAutoScroll({ paused: !autoScroll.paused });
+  toast(autoScroll.paused ? 'Scroll paused' : 'Scroll resumed');
+}
+
+async function bumpScrollSpeed(delta) {
+  if (!autoScroll.enabled) await persistAutoScroll({ enabled: true, paused: false });
+  const speed = Math.min(SCROLL_MAX, Math.max(SCROLL_MIN, autoScroll.speed + delta));
+  await persistAutoScroll({ speed });
+  toast(`Scroll speed ${speed} px/s`);
+}
+
+function handleAutoScrollCmd({ action } = {}) {
+  if (action === 'toggle') setAutoScrollEnabled(!autoScroll.enabled);
+  else if (action === 'pause') toggleAutoScrollPause();
+  else if (action === 'slower') bumpScrollSpeed(-SCROLL_STEP);
+  else if (action === 'faster') bumpScrollSpeed(SCROLL_STEP);
+}
+
+btnScroll.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setAutoScrollEnabled(!autoScroll.enabled);
+});
+$('#m-scroll-toggle').addEventListener('click', () => runAndClose(() => setAutoScrollEnabled(!autoScroll.enabled)));
+$('#m-scroll-pause').addEventListener('click', () => runAndClose(() => toggleAutoScrollPause()));
+$('#m-scroll-slower').addEventListener('click', () => bumpScrollSpeed(-SCROLL_STEP));
+$('#m-scroll-faster').addEventListener('click', () => bumpScrollSpeed(SCROLL_STEP));
+window.overlay.on('auto-scroll-cmd', handleAutoScrollCmd);
+window.overlay.on('auto-scroll-tick', ({ delta }) => applyScrollTick(delta));
+
 // ─── Rename: double-click the title ──────────────────────────────────────────
 function startRename() {
   if (!hasFile) { toast('Start editing first to create the file'); return; }
@@ -205,9 +305,14 @@ window.overlay.on('load-file', (d) => {
   setTitle(d.name);
   isText = !!d.isText;
   if (d.theme) applyTheme(d.theme);
+  if (d.autoScroll) {
+    autoScroll = { ...autoScroll, ...d.autoScroll };
+    refreshScrollUI();
+  }
   document.body.classList.remove('editing');
   btnEdit.classList.remove('active');
   render(d.content);
+  resetScrollPos();
 });
 window.overlay.on('file-changed', (d) => {
   if (typeof d.isText === 'boolean') isText = d.isText;
@@ -227,6 +332,10 @@ window.overlay.on('status', (msg) => toast(msg));
         setTitle(s.name);
         isText = !!s.isText;
         render(s.content);
+      }
+      if (s.autoScroll) {
+        autoScroll = { ...autoScroll, ...s.autoScroll };
+        refreshScrollUI();
       }
     }
   } catch (e) { console.error(e); }

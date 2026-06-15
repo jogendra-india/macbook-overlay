@@ -66,23 +66,26 @@
     stroke-linecap: round; stroke-linejoin: round;
   }
   button.icon svg.dots { fill: currentColor; stroke: none; }
+  button.icon.scroll-on svg .scroll-arrows { stroke: var(--accent); }
 
-  .content { flex: 1; overflow: hidden; position: relative; }
-  /* Scrollable views */
-  #view, #editor {
-    position: absolute; inset: 0; overflow-y: auto; padding: 14px 18px;
+  .content {
+    flex: 1; min-height: 0; overflow-y: auto; position: relative;
+    -webkit-overflow-scrolling: touch;
   }
-  #view::-webkit-scrollbar, #editor::-webkit-scrollbar { width: 9px; }
-  #view::-webkit-scrollbar-thumb, #editor::-webkit-scrollbar-thumb {
+  .content::-webkit-scrollbar, #editor::-webkit-scrollbar { width: 9px; }
+  .content::-webkit-scrollbar-thumb, #editor::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,0.16); border-radius: 8px; border: 2px solid transparent;
     background-clip: content-box;
   }
+  #view { padding: 14px 18px; }
   #editor {
-    display: none; margin: 0; border: 0; resize: none; width: 100%;
+    display: none; margin: 0; border: 0; resize: none;
+    width: 100%; height: 100%; overflow-y: auto; padding: 14px 18px;
     background: var(--bg-solid); color: var(--text);
     font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px;
-    line-height: 1.55; outline: none;
+    line-height: 1.55; outline: none; box-sizing: border-box;
   }
+  body.editing .content { overflow: hidden; }
   body.editing #view { display: none; }
   body.editing #editor { display: block; }
 
@@ -192,6 +195,7 @@
       <span class="saved" id="saved"></span>
       <span class="drag-spacer"></span>
       <div class="actions">
+        <button class="icon" id="btn-scroll" title="Auto-scroll (⌥⌘S)"><svg viewBox="0 0 16 16"><path class="scroll-arrows" d="M8 2.5v11M5.2 4.8 8 2l2.8 2.8M5.2 11.2 8 14l2.8-2.8"/></svg></button>
         <button class="icon" id="btn-lock" title="Click-through lock"></button>
         <button class="icon" id="btn-edit" title="Toggle edit (autosaves)"><svg viewBox="0 0 16 16"><path d="M3 13l2.6-.7 7-7-1.9-1.9-7 7L3 13z"/><path d="M10.6 4.4l1.9 1.9"/></svg></button>
         <button class="icon" id="btn-more" title="More options"><svg viewBox="0 0 16 16" class="dots"><circle cx="3.6" cy="8" r="1.15"/><circle cx="8" cy="8" r="1.15"/><circle cx="12.4" cy="8" r="1.15"/></svg></button>
@@ -205,6 +209,15 @@
         <button class="mini" id="m-op-up" title="More opaque (⌥⌘=)">+</button>
       </div>
       <button class="menu-item" id="m-theme"><span>Theme</span><span class="grow"></span><span class="menu-val" id="m-theme-val">Dark</span></button>
+      <div class="menu-sep"></div>
+      <button class="menu-item" id="m-scroll-toggle"><span class="mi-ic">↕</span>Auto-scroll<span class="grow"></span><span class="menu-val" id="m-scroll-val">Off</span></button>
+      <div class="menu-row">
+        <span class="menu-key">Speed</span><span class="grow"></span>
+        <button class="mini" id="m-scroll-slower" title="Slower (⌥⌘[)">−</button>
+        <span class="menu-val" id="m-scroll-speed">12</span>
+        <button class="mini" id="m-scroll-faster" title="Faster (⌥⌘])">+</button>
+      </div>
+      <button class="menu-item" id="m-scroll-pause"><span class="mi-ic">⏸</span><span id="m-scroll-pause-label">Pause scroll</span></button>
       <div class="menu-sep"></div>
       <button class="menu-item" id="m-new"><span class="mi-ic">＋</span>New note</button>
       <button class="menu-item" id="m-open"><span class="mi-ic">📂</span>Open file…</button>

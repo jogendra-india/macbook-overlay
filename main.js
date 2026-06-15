@@ -27,6 +27,7 @@ function newRecord() {
     displayIndex: 0,
     theme: 'dark',
     bounds: null,
+    autoScroll: { enabled: false, speed: 12, paused: false },
   };
 }
 
@@ -60,6 +61,7 @@ function persist() {
     arr.push({
       id: e.rec.id, file: e.rec.file, opacity: e.rec.opacity,
       displayIndex: e.rec.displayIndex, theme: e.rec.theme || 'dark', bounds,
+      autoScroll: e.rec.autoScroll || { enabled: false, speed: 12, paused: false },
     });
   }
   if (arr.length) settings.overlays = arr;
@@ -100,6 +102,7 @@ function createOverlay(rec, stagger = 0) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // allow preload to require('markdown-it')
+      backgroundThrottling: false, // keep auto-scroll alive when unfocused
     },
   });
 
@@ -113,7 +116,7 @@ function createOverlay(rec, stagger = 0) {
   // flowing) only while the pointer is over the content and the panel is locked.
 
   const wcId = win.webContents.id;   // capture now; webContents is gone after 'closed'
-  const entry = { rec, win, watcher: null, suppressUntil: 0 };
+  const entry = { rec, win, watcher: null, suppressUntil: 0, scrollTimer: null };
   overlays.set(wcId, entry);
 
   win.webContents.on('preload-error', (_e, p, err) =>
@@ -132,6 +135,7 @@ function createOverlay(rec, stagger = 0) {
   win.on('move', persistSoon);
   win.on('closed', () => {
     if (entry.watcher) entry.watcher.close();
+    clearScrollTimer(entry);
     overlays.delete(wcId);
     if (lastActiveId === wcId) lastActiveId = null;
     persist();
@@ -139,6 +143,9 @@ function createOverlay(rec, stagger = 0) {
   });
 
   if (rec.file) watchFile(entry, rec.file);
+  if (rec.autoScroll && rec.autoScroll.enabled && !rec.autoScroll.paused) {
+    win.webContents.once('did-finish-load', () => syncScrollTimer(entry));
+  }
   buildTrayMenu();
   return entry;
 }
@@ -170,6 +177,7 @@ function payloadFor(entry) {
     theme: entry.rec.theme || 'dark',
     isText: isTextFile(entry.rec.file),
     content,
+    autoScroll: entry.rec.autoScroll || { enabled: false, speed: 12, paused: false },
   };
 }
 
@@ -349,6 +357,50 @@ ipcMain.handle('set-theme', (e, theme) => {
   persistSoon();
   return en.rec.theme;
 });
+function clearScrollTimer(entry) {
+  if (!entry) return;
+  if (entry.scrollTimer) {
+    clearInterval(entry.scrollTimer);
+    entry.scrollTimer = null;
+  }
+  entry.scrollTickAt = null;
+}
+
+function syncScrollTimer(entry) {
+  clearScrollTimer(entry);
+  if (!entry) return;
+  const as = entry.rec.autoScroll || {};
+  if (!as.enabled || as.paused) return;
+  entry.scrollTickAt = Date.now();
+  entry.scrollTimer = setInterval(() => {
+    if (!entry.win || entry.win.isDestroyed()) {
+      clearScrollTimer(entry);
+      return;
+    }
+    const now = Date.now();
+    const dt = Math.min((now - entry.scrollTickAt) / 1000, 0.1);
+    entry.scrollTickAt = now;
+    const speed = Math.min(80, Math.max(3, entry.rec.autoScroll?.speed || 12));
+    send(entry, 'auto-scroll-tick', { delta: speed * dt });
+  }, 16);
+}
+
+ipcMain.handle('set-auto-scroll', (e, patch) => {
+  const en = entryOf(e); if (!en) return null;
+  const cur = en.rec.autoScroll || { enabled: false, speed: 12, paused: false };
+  en.rec.autoScroll = { ...cur, ...patch };
+  if (typeof en.rec.autoScroll.speed === 'number') {
+    en.rec.autoScroll.speed = Math.min(80, Math.max(3, Math.round(en.rec.autoScroll.speed)));
+  }
+  syncScrollTimer(en);
+  persistSoon();
+  return en.rec.autoScroll;
+});
+function autoScrollCmd(action) {
+  const en = activeEntry();
+  if (!en) return;
+  send(en, 'auto-scroll-cmd', { action });
+}
 
 // ─── Auto-start (LaunchAgent — reliable for the unpackaged dev app too) ────────
 function loginEnabled() { return fs.existsSync(LAUNCH_AGENT); }
@@ -414,6 +466,15 @@ function buildTrayMenu() {
         { label: 'Decrease', accelerator: 'Alt+Cmd+-', click: () => bumpOpacity(activeEntry(), -0.1) },
       ],
     },
+    {
+      label: 'Auto-scroll (active)',
+      submenu: [
+        { label: 'Toggle', accelerator: 'Alt+Cmd+S', click: () => autoScrollCmd('toggle') },
+        { label: 'Pause / resume', accelerator: 'Alt+Cmd+P', click: () => autoScrollCmd('pause') },
+        { label: 'Slower', accelerator: 'Alt+Cmd+[', click: () => autoScrollCmd('slower') },
+        { label: 'Faster', accelerator: 'Alt+Cmd+]', click: () => autoScrollCmd('faster') },
+      ],
+    },
     { type: 'separator' },
     { label: `Overlays open: ${overlays.size}`, enabled: false },
     { label: 'Open at login', type: 'checkbox', checked: loginEnabled(), click: (i) => setLogin(i.checked) },
@@ -445,6 +506,10 @@ app.whenReady().then(() => {
   globalShortcut.register('Alt+Cmd+Right', () => { const e = activeEntry(); if (e) moveToDisplay(e, e.rec.displayIndex + 1); });
   globalShortcut.register('Alt+Cmd+F', () => pickFile(activeEntry()));
   globalShortcut.register('Alt+Cmd+N', () => newNote(activeEntry()));
+  globalShortcut.register('Alt+Cmd+S', () => autoScrollCmd('toggle'));
+  globalShortcut.register('Alt+Cmd+P', () => autoScrollCmd('pause'));
+  globalShortcut.register('Alt+Cmd+[', () => autoScrollCmd('slower'));
+  globalShortcut.register('Alt+Cmd+]', () => autoScrollCmd('faster'));
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());
